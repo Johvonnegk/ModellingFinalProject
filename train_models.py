@@ -13,6 +13,15 @@ feature_cols = [
     "damping_ratio", "omega_n", "y0",  # engineered
 ]
 
+def get_estimators(data_len, model_type):
+    if model_type == "rf":
+        # 1 tree per 5–10 samples, capped at 300
+        return min(max(data_len // 5, 50), 300)
+    elif model_type == "gb":
+        # 1 tree per 3–4 samples, capped at 1000
+        return min(max(data_len // 3, 100), 1000)
+
+
 def collect_data(df=None):
     if df is None:
         print("DataFrame not found, running simulation 100 times")
@@ -36,9 +45,9 @@ def collect_data(df=None):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
     return x_train, x_test, y_train, y_test, x, y
 
-def train_random_forest(df=None, estimators=100):
+def train_random_forest(df=None):
     x_train, x_test, y_train, y_test, x, y = collect_data(df)
-    rf_model = RandomForestRegressor(n_estimators=estimators, random_state=42)
+    rf_model = RandomForestRegressor(n_estimators=get_estimators(len(x_train), 'rf'), random_state=42)
     rf_model.fit(x_train, y_train)
 
     # Evaluate
@@ -53,8 +62,9 @@ def train_random_forest(df=None, estimators=100):
 
     print(tabulate([
         ["R² Score", f"{r2:.3f}"],
-        ["MAE", f"{mae:.2f}"],
-        ["RMSE", f"{rmse:.2f}"]
+        ["R² (as %)", f"{r2 * 100:.1f} %"],
+        ["MAE", f"{mae:.2f} N/m"],
+        ["RMSE", f"{rmse:.2f} N/m"]
     ], headers=["Metric", "Random Forest"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
@@ -63,12 +73,12 @@ def train_random_forest(df=None, estimators=100):
     display_distribution_err(y_test, y_pred, model="Random Forest")
     return rf_model
 
-def train_gradient_boost(df=None, estimators=100):
+def train_gradient_boost(df=None):
     x_train, x_test, y_train, y_test, x, y = collect_data(df)
 
     # Train a random forest
     gb_model = GradientBoostingRegressor(
-        n_estimators=estimators,
+        n_estimators=get_estimators(len(x_train), 'gb'),
         learning_rate=0.05,
         max_depth=4,
         random_state=42
@@ -87,8 +97,9 @@ def train_gradient_boost(df=None, estimators=100):
 
     print(tabulate([
         ["R² Score", f"{r2:.3f}"],
-        ["MAE", f"{mae:.2f}"],
-        ["RMSE", f"{rmse:.2f}"]
+        ["R² (as %)", f"{r2 * 100:.1f} %"],
+        ["MAE", f"{mae:.2f} N/m"],
+        ["RMSE", f"{rmse:.2f} N/m"]
     ], headers=["Metric", "Gradient Boost"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
