@@ -8,9 +8,9 @@ time = np.arange(0, t_max, dt)
 
 # Constants
 L = 1.0  # effective spring length
-gravity_options = [1.62, 3.71, 9.81, 24.79]  # Moon, Mars, Earth, Jupiter
+gravity_options = [1.62, 3.71, 9.81, 24.79]  # Gravity for Moon, Mars, Earth, Jupiter
 
-# Stop detection
+# Function responsible for stop detection
 @njit
 def has_stopped(displacement, velocity, threshold=0.05, window=0.05, dt=0.001):
     samples = int(window / dt)
@@ -20,7 +20,7 @@ def has_stopped(displacement, velocity, threshold=0.05, window=0.05, dt=0.001):
             return i * dt
     return -1.0  # Numba-safe fallback (instead of None)
 
-# Derivatives (standalone)
+# Function responsible for calculating the derivatives of the system
 @njit
 def calculate_derivatives(t, y, m, c, k, g):
     y1, y2 = y
@@ -28,7 +28,7 @@ def calculate_derivatives(t, y, m, c, k, g):
     dy2dt = -(c/m) * y2 - (k/m) * y1 + g
     return np.array([dy1dt, dy2dt])
 
-# RK4 that accepts full dynamics parameters
+# Function responsible for solving RK4 (Runge Kutta 4th Order) that accepts full dynamics parameters
 @njit
 def runge_kutta_4(y0, t, m, c, k, g):
     y = np.zeros((len(t), len(y0)))
@@ -42,7 +42,7 @@ def runge_kutta_4(y0, t, m, c, k, g):
         y[i] = y[i-1] + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
     return y
 
-# Full simulation
+# Runs the simulation in its entirety for a given set of parameters and returns the time it takes to stop
 @njit
 def simulate(m, c, k, g, angle_deg):
     theta = np.radians(angle_deg)

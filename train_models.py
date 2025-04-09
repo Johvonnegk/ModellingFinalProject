@@ -8,49 +8,63 @@ from simulate import L
 import matplotlib.pyplot as plt
 from tabulate import tabulate
 
+# These are the columns that will be used as features for the model.
+# The original columns are mass, damping, gravity, and angle_deg.
+# The engineered columns are damping_ratio, omega_n, and y0.
 feature_cols = [
     "mass", "damping", "gravity", "angle_deg",  # original
     "damping_ratio", "omega_n", "y0",  # engineered
 ]
 
+# This function will be used to calculate the number of estimators for the Random Forest and Gradient Boosting models.
+# The number of estimators is based on the length of the data and the type of model.
 def get_estimators(data_len, model_type):
     if model_type == "rf":
-        # 1 tree per 5–10 samples, capped at 300
+        # 1 tree per 5–10 samples, capped at 300 ~ Random Forest
         estimators = min(max(data_len // 5, 50), 300)
         print(f"Running Random Forest with {estimators} estimators")
         return min(max(data_len // 5, 50), 300)
+    
     elif model_type == "gb":
-        # 1 tree per 3–4 samples, capped at 1000
+        # 1 tree per 3–4 samples, capped at 1000 ~ Gradient Boosting
         estimators = min(max(data_len // 3, 100), 1000)
         print(f"Running Gradient Boost with {estimators} estimators")
         return estimators
 
-
+# This function will be used to collect the data needed to train the model.
 def collect_data(df=None):
+    
+    # Will generate its own data if no DataFrame is provided.
     if df is None:
         print("DataFrame not found, running simulation 100 times")
         df = run_simulation_with_tuning(100)
 
 
 
-    # Filter successful trials
+    # Filter only the successful trials
     df_success = df[df['success']].dropna()
 
+    # Feature engineering, gathering more fields from the simulation to train the model.
     df_success["damping_ratio"] = df_success["damping"] / (2 * np.sqrt(df_success["best_k"] * df_success["mass"]))
     df_success["omega_n"] = np.sqrt(df_success["best_k"] / df_success["mass"])
     df_success["theta_rad"] = np.radians(df_success["angle_deg"])
     df_success["y0"] = L * df_success["theta_rad"]
 
-    # Features and target
+    # Rows and columns to be used for training the model.
     x = df_success[feature_cols]
     y = df_success['best_k']
 
-    # Train-test split
+    #  Splitting the data into training and testing sets, and returning them
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
     return x_train, x_test, y_train, y_test, x, y
 
-def train_random_forest(df=None, save=False, show=True):    
+# Function used to train the model using Random Forest 
+def train_random_forest(df=None, save=False, show=True): 
+    
+    # Collect the data necessary to train the model.   
     x_train, x_test, y_train, y_test, x, y = collect_data(df)
+    
+    # Training the model using Random Forest.
     rf_model = RandomForestRegressor(n_estimators=get_estimators(len(x_train), 'rf'), random_state=42)
     rf_model.fit(x_train, y_train)
 
@@ -59,11 +73,13 @@ def train_random_forest(df=None, save=False, show=True):
     r2 = r2_score(y_test, y_pred)
     mae, rmse = calculate_mae_rmse(y_test, y_pred)
 
-    # Feature importances
+    # Calculate feature importances/weights (how important each feature is for the model).
     importances = rf_model.feature_importances_
     importances_percent = importances / importances.sum() * 100
     xi = sorted(zip(x.columns, importances_percent), key=lambda i: i[1], reverse=True)
 
+    # Prints the results of the model evaluation in a nice tabular output
+    # Including R² score, MAE, RMSE, and feature importances.
     print(tabulate([
         ["R² Score", f"{r2:.3f}"],
         ["R² (as %)", f"{r2 * 100:.1f} %"],
@@ -72,15 +88,21 @@ def train_random_forest(df=None, save=False, show=True):
     ], headers=["Metric", "Random Forest"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
+    
+    # Display the feature importances, predicted vs actual values, and distribution of errors.
+    # Returns the trained model.
     display_importances(xi, model="Random Forest", save=save, show=show)
     display_predicted_vs_actual(y_test, y_pred, y, model="Random Forest", save=save, show=show)
     display_distribution_err(y_test, y_pred, model="Random Forest", save=save, show=show)
     return rf_model
 
+# Function used to train the model using Gradient Boosting
 def train_gradient_boost(df=None, save=False, show=True):
+    
+    # Collect the data necessary to train the model.
     x_train, x_test, y_train, y_test, x, y = collect_data(df)
 
-    # Train a random forest
+    # Training the model using Gradient Boosting.
     gb_model = GradientBoostingRegressor(
         n_estimators=get_estimators(len(x_train), 'gb'),
         learning_rate=0.05,
@@ -94,11 +116,13 @@ def train_gradient_boost(df=None, save=False, show=True):
     r2 = r2_score(y_test, y_pred)
     mae, rmse = calculate_mae_rmse(y_test, y_pred)
 
-    # Feature importances
+    # Feature importances/weights (how important each feature is for the model).
     importances = gb_model.feature_importances_
     importances_percent = importances / importances.sum() * 100
     xi = sorted(zip(x.columns, importances_percent), key=lambda i: i[1], reverse=True)
 
+    # Prints the results of the model evaluation in a nice tabular output
+    # Including R² score, MAE, RMSE, and feature importances.
     print(tabulate([
         ["R² Score", f"{r2:.3f}"],
         ["R² (as %)", f"{r2 * 100:.1f} %"],
@@ -107,16 +131,23 @@ def train_gradient_boost(df=None, save=False, show=True):
     ], headers=["Metric", "Gradient Boost"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
+    
+    # Display the feature importances, predicted vs actual values, and distribution of errors.
+    # Returns the trained model.
     display_importances(xi, model="Gradient Boosting", save=save, show=show)
     display_predicted_vs_actual(y_test, y_pred, y, model="Gradient Boosting", save=save, show=show)
     display_distribution_err(y_test, y_pred, model="Gradient Boosting", save=save, show=show)
     return gb_model
 
+# Function used to calculate the Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE).
 def calculate_mae_rmse(y_test, y_pred):
     mae = mean_absolute_error(y_test, y_pred)
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     return mae, rmse
 
+# Function used to display the predicted vs actual values of the model.
+# It will plot a scatter plot of the predicted vs actual values.
+# It will also plot a red dashed line representing the line of best fit.
 def display_predicted_vs_actual(y_test, y_pred, y, model="Model", save=False, show=True):
     plt.scatter(y_test, y_pred, color='dodgerblue', alpha=0.7)
     plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', label='Ideal Prediction')
@@ -130,6 +161,8 @@ def display_predicted_vs_actual(y_test, y_pred, y, model="Model", save=False, sh
     if show:
         plt.show()
 
+# Function used to display the distribution of errors.
+# It will plot a histogram of the errors (predicted - actual values).
 def display_distribution_err(y_test, y_pred, model="Model", save=False, show=True):
     errors = y_pred - y_test
     plt.hist(errors, bins=20)
@@ -144,6 +177,8 @@ def display_distribution_err(y_test, y_pred, model="Model", save=False, show=Tru
     if show:
         plt.show()
 
+# Function used to display the feature importances.
+# It will plot a bar chart of the feature importances.
 def display_importances(xi, model="Model", save=False, show=True):
     features, importances = zip(*xi)
     plt.barh(features, importances)
