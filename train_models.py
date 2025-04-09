@@ -3,7 +3,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
-from tune import run_simulation_with_tuning
+from tune import run_success_based_sampling_simulation, run_monte_carlo_simulation
 from simulate import L
 import matplotlib.pyplot as plt
 from tabulate import tabulate
@@ -36,8 +36,8 @@ def collect_data(df=None):
     
     # Will generate its own data if no DataFrame is provided.
     if df is None:
-        print("DataFrame not found, running simulation 100 times")
-        df = run_simulation_with_tuning(100)
+        print("DataFrame not found, cannot train model.")
+        return None
 
 
 
@@ -59,10 +59,16 @@ def collect_data(df=None):
     return x_train, x_test, y_train, y_test, x, y
 
 # Function used to train the model using Random Forest 
-def train_random_forest(df=None, save=False, show=True): 
+def train_random_forest(df=None, mode=None, save=False, show=True): 
     
-    # Collect the data necessary to train the model.   
-    x_train, x_test, y_train, y_test, x, y = collect_data(df)
+    # Collect the data necessary to train the model.
+    collected_data = collect_data(df)
+    
+    if collected_data is None:
+        print("No data to train the model.")
+        return None
+    
+    x_train, x_test, y_train, y_test, x, y = collected_data   
     
     # Training the model using Random Forest.
     rf_model = RandomForestRegressor(n_estimators=get_estimators(len(x_train), 'rf'), random_state=42)
@@ -80,27 +86,37 @@ def train_random_forest(df=None, save=False, show=True):
 
     # Prints the results of the model evaluation in a nice tabular output
     # Including R² score, MAE, RMSE, and feature importances.
+    print(f"{mode} ~ Random Forest:")
     print(tabulate([
         ["R² Score", f"{r2:.3f}"],
         ["R² (as %)", f"{r2 * 100:.1f} %"],
         ["MAE", f"{mae:.2f} N/m"],
-        ["RMSE", f"{rmse:.2f} N/m"]
+        ["RMSE", f"{rmse:.2f} N/m"],
+        ["Number of successes", f"{len(x)} samples"],
+        ["Total number of samples", f"{len(df)} samples"],
+        ["Success rate", f"{len(x) / len(df) * 100:.1f} %"],
     ], headers=["Metric", "Random Forest"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
     
     # Display the feature importances, predicted vs actual values, and distribution of errors.
     # Returns the trained model.
-    display_importances(xi, model="Random Forest", save=save, show=show)
-    display_predicted_vs_actual(y_test, y_pred, y, model="Random Forest", save=save, show=show)
-    display_distribution_err(y_test, y_pred, model="Random Forest", save=save, show=show)
+    display_importances(xi, mode, model="Random Forest", save=save, show=show)
+    display_predicted_vs_actual(y_test, y_pred, y, mode, model="Random Forest", save=save, show=show)
+    display_distribution_err(y_test, y_pred, mode, model="Random Forest", save=save, show=show)
     return rf_model
 
 # Function used to train the model using Gradient Boosting
-def train_gradient_boost(df=None, save=False, show=True):
+def train_gradient_boost(df=None, mode="", save=False, show=True):
     
     # Collect the data necessary to train the model.
-    x_train, x_test, y_train, y_test, x, y = collect_data(df)
+    collected_data = collect_data(df)
+    
+    if collected_data is None:
+        print("No data to train the model.")
+        return None
+    
+    x_train, x_test, y_train, y_test, x, y = collected_data 
 
     # Training the model using Gradient Boosting.
     gb_model = GradientBoostingRegressor(
@@ -123,20 +139,24 @@ def train_gradient_boost(df=None, save=False, show=True):
 
     # Prints the results of the model evaluation in a nice tabular output
     # Including R² score, MAE, RMSE, and feature importances.
+    print(f"{mode} ~ Gradient Boost:")
     print(tabulate([
         ["R² Score", f"{r2:.3f}"],
         ["R² (as %)", f"{r2 * 100:.1f} %"],
         ["MAE", f"{mae:.2f} N/m"],
-        ["RMSE", f"{rmse:.2f} N/m"]
+        ["RMSE", f"{rmse:.2f} N/m"],
+        ["Number of successes", f"{len(x)} samples"],
+        ["Total number of samples", f"{len(df)} samples"],
+        ["Success rate", f"{len(x) / len(df) * 100:.1f} %"],
     ], headers=["Metric", "Gradient Boost"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
     
     # Display the feature importances, predicted vs actual values, and distribution of errors.
     # Returns the trained model.
-    display_importances(xi, model="Gradient Boosting", save=save, show=show)
-    display_predicted_vs_actual(y_test, y_pred, y, model="Gradient Boosting", save=save, show=show)
-    display_distribution_err(y_test, y_pred, model="Gradient Boosting", save=save, show=show)
+    display_importances(xi, mode, model="Gradient Boosting", save=save, show=show)
+    display_predicted_vs_actual(y_test, y_pred, y, mode, model="Gradient Boosting", save=save, show=show)
+    display_distribution_err(y_test, y_pred, mode, model="Gradient Boosting", save=save, show=show)
     return gb_model
 
 # Function used to calculate the Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE).
@@ -148,46 +168,46 @@ def calculate_mae_rmse(y_test, y_pred):
 # Function used to display the predicted vs actual values of the model.
 # It will plot a scatter plot of the predicted vs actual values.
 # It will also plot a red dashed line representing the line of best fit.
-def display_predicted_vs_actual(y_test, y_pred, y, model="Model", save=False, show=True):
+def display_predicted_vs_actual(y_test, y_pred, y, mode, model="Model", save=False, show=True):
     plt.scatter(y_test, y_pred, color='dodgerblue', alpha=0.7)
     plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', label='Ideal Prediction')
     plt.xlabel("Actual Spring k")
     plt.ylabel("Predicted Spring k")
-    plt.title(f"{model}: Predicted vs Actual spring_k")
+    plt.title(f"{mode} ~ {model}: Predicted vs Actual spring_k")
     plt.grid(True)
     if save:
-        plt.savefig(f"{model}_predicted_vs_actual.png")
+        plt.savefig(f"{mode}_{model}_predicted_vs_actual.png")
     
     if show:
         plt.show()
 
 # Function used to display the distribution of errors.
 # It will plot a histogram of the errors (predicted - actual values).
-def display_distribution_err(y_test, y_pred, model="Model", save=False, show=True):
+def display_distribution_err(y_test, y_pred, mode, model="Model", save=False, show=True):
     errors = y_pred - y_test
     plt.hist(errors, bins=20)
-    plt.title(f"{model}: Prediction Error Distribution")
+    plt.title(f"{mode} ~ {model}: Prediction Error Distribution")
     plt.xlabel("Prediction Error", color='salmon')
     plt.ylabel("Count")
     plt.grid(True)
     plt.tight_layout()
     if save:
-        plt.savefig(f"{model}_prediction_error.png")
+        plt.savefig(f"{mode}_{model}_prediction_error.png")
     
     if show:
         plt.show()
 
 # Function used to display the feature importances.
 # It will plot a bar chart of the feature importances.
-def display_importances(xi, model="Model", save=False, show=True):
+def display_importances(xi, mode, model="Model", save=False, show=True):
     features, importances = zip(*xi)
     plt.barh(features, importances)
     plt.xlabel("Importance")
-    plt.title(f"{model}: Feature Importances")
+    plt.title(f"{mode} ~ {model}: Feature Importances")
     plt.tight_layout()
 
     if save:
-        plt.savefig(f"{model}_feature_importances.png")
+        plt.savefig(f"{mode}_{model}_feature_importances.png")
     if show:
         plt.show()
 

@@ -17,17 +17,41 @@ def tune_k_for_config(mass, damping, gravity, angle_deg, k_range=np.linspace(5, 
 
     return best_k, best_time if best_k else (None, None)
 
+# This function will be used to run the Monte Carlo simulation for a specified number of trials.
+def run_monte_carlo_simulation(trials=100, process_id=0):
+    results = []
+    for _ in tqdm(range(trials), desc=f"[MC Worker {process_id}]", position=process_id, ncols=80):
+        
+        g = np.random.choice(gravity_options)
+        m = np.random.uniform(0.5, 5.0)
+        c = np.random.uniform(1.0, 20.0)
+        angle = np.random.uniform(-15, 15)
+
+        best_k, t_settle = tune_k_for_config(m, c, g, angle)
+
+        results.append({
+            "mass": m,
+            "damping": c,
+            "gravity": g,
+            "angle_deg": angle,
+            "best_k": best_k if best_k else np.nan,
+            "settling_time": t_settle if t_settle else np.nan,
+            "success": best_k is not None and t_settle <= 1.0
+        })
+    return pd.DataFrame(results)
+
 # Run the simulation with tuning for a specified number of successful trials.
 # The function will randomly select values for mass, damping, gravity, and angle within specified ranges, and use it for the simulation.
-def run_simulation_with_tuning(target_successes=40, process_id=0):
+def run_success_based_sampling_simulation(target_successes=40, process_id=0):
     results = []
     success_count = 0
     trial = 0
     err = False
+    
     # Creates a progress bar to visualize the progress of the simulation.
     pbar = tqdm(
         total=target_successes,
-        desc=f"[Worker {process_id}]",
+        desc=f"[SB Worker {process_id}]",
         position=process_id,
         leave=True,
         ncols=80
