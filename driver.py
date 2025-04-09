@@ -5,6 +5,7 @@ import time
 from train_models import train_random_forest, train_gradient_boost
 import joblib
 import argparse
+from tabulate import tabulate
 
 
 def generate_data(workers=1, success_count=40):
@@ -33,10 +34,23 @@ if __name__ == "__main__":
                         nargs="+", 
                         choices=["rf", "gb"], 
                         default=["rf", "gb"], 
-                        help="Which model(s) to train: rf, gb, or both (e.g. --models rf gb)")
+                        help="Which model(s) to train: rf, gb, or both (e.g. --models rf gb). Will run both by default.")
     parser.add_argument("--output", type=str, default="parallel_successes", help="Output CSV filename, you do not have to include the file extension.")
+    parser.add_argument("--save-figures", action="store_true", help="Save all figures to disk")
+    parser.add_argument("--hide-figures", action="store_false", help="Hide all figures")
 
     args = parser.parse_args()
+
+    print("Running with the following parameters:")
+    print(tabulate([
+        ["Workers", args.workers],
+        ["Successes per worker", args.successes],
+        ["Total number of data points", args.workers * args.successes],
+        ["Models to train", ", ".join(args.models)],
+        ["Output filename", f"{args.output}.csv"],
+        ["Save figures", args.save_figures],
+        ["Hide figures", args.hide_figures]
+    ], headers=["Parameter", "Value"], tablefmt="fancy_grid"))
 
     start_time = time.time()
     try:
@@ -44,23 +58,23 @@ if __name__ == "__main__":
         data_set.to_csv(f"{args.output}.csv", index=False)
         elapsed = time.time() - start_time
         if elapsed < 60:
-            print(f"⏱️ Data generation completed in {elapsed:.2f} seconds")
+            print(f"Data generation completed in {elapsed:.2f} seconds")
         else:
             mins, secs = divmod(elapsed, 60)
-            print(f"⏱️ Data generation completed in {int(mins)}m {int(secs)}s")
+            print(f"Data generation completed in {int(mins)}m {int(secs)}s")
 
         print("Data saved to 'parallel_successes.csv'")
-        print("Training models...")
+        print("Training models...\n")
 
         if 'rf' in args.models:
-            rf_model = train_random_forest(data_set)
+            rf_model = train_random_forest(data_set, args.save_figures, args.hide_figures)
             joblib.dump(rf_model, "rf_model.pkl")
-            print("Saved model to 'rf_model.pkl'")
+            print("Saved model to 'rf_model.pkl'\n")
 
         if 'gb' in args.models:
-            gb_model = train_gradient_boost(data_set)
+            gb_model = train_gradient_boost(data_set, args.save_figures, args.hide_figures)
             joblib.dump(gb_model, "gb_model.pkl")
-            print("Saved model to 'gb_model.pkl'")
+            print("Saved model to 'gb_model.pkl'\n")
 
     except KeyboardInterrupt:
-        print("Interrupted by user, exiting main program...")
+        print("\nInterrupted by user, exiting main program...")

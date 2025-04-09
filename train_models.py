@@ -16,10 +16,14 @@ feature_cols = [
 def get_estimators(data_len, model_type):
     if model_type == "rf":
         # 1 tree per 5–10 samples, capped at 300
+        estimators = min(max(data_len // 5, 50), 300)
+        print(f"Running Random Forest with {estimators} estimators")
         return min(max(data_len // 5, 50), 300)
     elif model_type == "gb":
         # 1 tree per 3–4 samples, capped at 1000
-        return min(max(data_len // 3, 100), 1000)
+        estimators = min(max(data_len // 3, 100), 1000)
+        print(f"Running Gradient Boost with {estimators} estimators")
+        return estimators
 
 
 def collect_data(df=None):
@@ -45,7 +49,7 @@ def collect_data(df=None):
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
     return x_train, x_test, y_train, y_test, x, y
 
-def train_random_forest(df=None):
+def train_random_forest(df=None, save=False, show=True):    
     x_train, x_test, y_train, y_test, x, y = collect_data(df)
     rf_model = RandomForestRegressor(n_estimators=get_estimators(len(x_train), 'rf'), random_state=42)
     rf_model.fit(x_train, y_train)
@@ -68,12 +72,12 @@ def train_random_forest(df=None):
     ], headers=["Metric", "Random Forest"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
-    display_importances(xi, model="Random Forest")
-    display_predicted_vs_actual(y_test, y_pred, y, model="Random Forest")
-    display_distribution_err(y_test, y_pred, model="Random Forest")
+    display_importances(xi, model="Random Forest", save=save, show=show)
+    display_predicted_vs_actual(y_test, y_pred, y, model="Random Forest", save=save, show=show)
+    display_distribution_err(y_test, y_pred, model="Random Forest", save=save, show=show)
     return rf_model
 
-def train_gradient_boost(df=None):
+def train_gradient_boost(df=None, save=False, show=True):
     x_train, x_test, y_train, y_test, x, y = collect_data(df)
 
     # Train a random forest
@@ -103,9 +107,9 @@ def train_gradient_boost(df=None):
     ], headers=["Metric", "Gradient Boost"], tablefmt="fancy_grid"))
     print(tabulate(xi, headers=["Feature", "Importance %"], tablefmt="fancy_grid", floatfmt=".3f"))
     print("")
-    display_importances(xi, model="Gradient Boosting")
-    display_predicted_vs_actual(y_test, y_pred, y, model="Gradient Boosting")
-    display_distribution_err(y_test, y_pred, model="Gradient Boosting")
+    display_importances(xi, model="Gradient Boosting", save=save, show=show)
+    display_predicted_vs_actual(y_test, y_pred, y, model="Gradient Boosting", save=save, show=show)
+    display_distribution_err(y_test, y_pred, model="Gradient Boosting", save=save, show=show)
     return gb_model
 
 def calculate_mae_rmse(y_test, y_pred):
@@ -113,16 +117,20 @@ def calculate_mae_rmse(y_test, y_pred):
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     return mae, rmse
 
-def display_predicted_vs_actual(y_test, y_pred, y, model="Model"):
+def display_predicted_vs_actual(y_test, y_pred, y, model="Model", save=False, show=True):
     plt.scatter(y_test, y_pred, color='dodgerblue', alpha=0.7)
     plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', label='Ideal Prediction')
     plt.xlabel("Actual Spring k")
     plt.ylabel("Predicted Spring k")
     plt.title(f"{model}: Predicted vs Actual spring_k")
     plt.grid(True)
-    plt.show()
+    if save:
+        plt.savefig(f"{model}_predicted_vs_actual.png")
+    
+    if show:
+        plt.show()
 
-def display_distribution_err(y_test, y_pred, model="Model"):
+def display_distribution_err(y_test, y_pred, model="Model", save=False, show=True):
     errors = y_pred - y_test
     plt.hist(errors, bins=20)
     plt.title(f"{model}: Prediction Error Distribution")
@@ -130,13 +138,21 @@ def display_distribution_err(y_test, y_pred, model="Model"):
     plt.ylabel("Count")
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    if save:
+        plt.savefig(f"{model}_prediction_error.png")
+    
+    if show:
+        plt.show()
 
-def display_importances(xi, model="Model"):
+def display_importances(xi, model="Model", save=False, show=True):
     features, importances = zip(*xi)
     plt.barh(features, importances)
     plt.xlabel("Importance")
     plt.title(f"{model}: Feature Importances")
     plt.tight_layout()
-    plt.show()
+
+    if save:
+        plt.savefig(f"{model}_feature_importances.png")
+    if show:
+        plt.show()
 
